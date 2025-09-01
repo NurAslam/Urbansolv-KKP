@@ -105,31 +105,31 @@ def analyze_roi(roi_id: str, params: AnalyzeParams):
     )
 
 # ---------- NDWI / NDBI preview as simple stats (optionally return URL tile later) ----------
-@app.get("/roi/{roi_id}/index")
-def index_preview(roi_id: str, year: int, index: str = "ndwi", cloud_pct: int = 15):
-    roi_path = os.path.join(settings.ROI_DIR, f"{roi_id}.geojson")
-    if not os.path.exists(roi_path):
-        raise HTTPException(404, "ROI tidak ditemukan")
-    roi_gdf = load_roi_gdf(roi_path)
-    geom = ee.Geometry(roi_gdf.unary_union.__geo_interface__)
-    img = annual_median(year, geom, cloud_pct)
+# @app.get("/roi/{roi_id}/index")
+# def index_preview(roi_id: str, year: int, index: str = "ndwi", cloud_pct: int = 15):
+#     roi_path = os.path.join(settings.ROI_DIR, f"{roi_id}.geojson")
+#     if not os.path.exists(roi_path):
+#         raise HTTPException(404, "ROI tidak ditemukan")
+#     roi_gdf = load_roi_gdf(roi_path)
+#     geom = ee.Geometry(roi_gdf.unary_union.__geo_interface__)
+#     img = annual_median(year, geom, cloud_pct)
 
-    if index.lower() == "ndbi":
-        band = ndbi(img)
-        vis = {'min': -0.3, 'max': 0.3, 'palette': ['#f7fbff','#6baed6','#08306b']}
-    else:
-        band = ndwi(img)
-        vis = {'min': -0.3, 'max': 0.7, 'palette': ['#fee5d9','#74c476','#006d2c']}
+#     if index.lower() == "ndbi":
+#         band = ndbi(img)
+#         vis = {'min': -0.3, 'max': 0.3, 'palette': ['#f7fbff','#6baed6','#08306b']}
+#     else:
+#         band = ndwi(img)
+#         vis = {'min': -0.3, 'max': 0.7, 'palette': ['#fee5d9','#74c476','#006d2c']}
 
-    mp = band.getMapId(vis)
-    # Frontend dapat konsumsi mp['tile_fetcher'].url_format sebagai TileLayer
-    return {
-        "year": year,
-        "index": index.lower(),
-        "tile_url": mp['tile_fetcher'].url_format,
-        "mapid": mp['mapid'],
-        "token": mp['token']
-    }
+#     mp = band.getMapId(vis)
+#     # Frontend dapat konsumsi mp['tile_fetcher'].url_format sebagai TileLayer
+#     return {
+#         "year": year,
+#         "index": index.lower(),
+#         "tile_url": mp['tile_fetcher'].url_format,
+#         "mapid": mp['mapid'],
+#         "token": mp['token']
+#     }
 
 # ---------- INTERSECTION ----------
 @app.post("/roi/{roi_id}/intersection", response_model=IntersectResult)
