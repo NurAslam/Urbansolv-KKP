@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Geo Backend Client</title>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
+  integrity="sha512-puBv+g0G3gN0V1uE5C0rSkgYtKJfTQG2P1aY2ZsMS+dN9hgXN8j1G0L9dy2OwLqg0u1F4YEiCekV4Wg5CWoQ=="
+  crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --accent:#22d3ee; --text:#e5e7eb; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; background: var(--bg); color: var(--text); }
+    #map { width:100%; height: calc(100vh - 96px); }
+    header { padding: 20px 24px; border-bottom: 1px solid #1f2937; display:flex; align-items:center; gap:16px; }
+    header h1 { font-size: 18px; margin:0; letter-spacing: .2px; }
+    header .endpoint { color: var(--muted); font-size: 12px; }
+    main { display:grid; grid-template-columns: 420px 1fr; gap: 16px; padding: 16px; }
+    .card { background: var(--panel); border: 1px solid #1f2937; border-radius: 14px; padding: 14px; }
+    .card h2 { font-size: 14px; margin: 0 0 10px; color:#c7d2fe; letter-spacing:.2px; }
+    label { font-size: 12px; color: var(--muted); display:block; margin-bottom: 6px; }
+    input[type="number"], input[type="text"], textarea { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #374151; background:#0b1220; color:var(--text); outline:none; }
+    textarea { min-height: 120px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .btn { appearance:none; border:none; padding:10px 12px; border-radius:10px; background: linear-gradient(135deg, #06b6d4, #3b82f6); color:white; font-weight:600; cursor:pointer; }
+    .btn.secondary { background:#1f2937; border:1px solid #374151; }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .muted { color: var(--muted); font-size: 12px; }
+    #map { width: 100%; height: calc(100vh - 120px); border-radius: 14px; border:1px solid #1f2937; }
+    pre { background:#0b1220; border:1px solid #1f2937; padding:10px; border-radius:10px; overflow:auto; max-height:220px; }
+    .pill { display:inline-flex; align-items:center; gap:8px; background:#0b1220; border:1px solid #374151; color:var(--muted); padding:6px 10px; border-radius:999px; font-size:12px; }
+    .stack { display:flex; flex-direction:column; gap:10px; }
+    .gap { height: 8px; }
+    
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Geo Backend Client</h1>
+    <span class="endpoint">→ Base URL: <code id="base-url-label">http://127.0.0.1:8000</code></span>
+    <span class="pill">Status: <span id="health">checking…</span></span>
+  </header>
+  <main>
+    <section class="card" id="controls">
+      <h2>1) Buat ROI</h2>
+      <div class="stack">
+        <div class="row">
+          <div>
+            <label>min_lon</label>
+            <input type="number" step="0.000001" id="min_lon" value="113.35">
+          </div>
+          <div>
+            <label>min_lat</label>
+            <input type="number" step="0.000001" id="min_lat" value="-7.22">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>max_lon</label>
+            <input type="number" step="0.000001" id="max_lon" value="113.38">
+          </div>
+          <div>
+            <label>max_lat</label>
+            <input type="number" step="0.000001" id="max_lat" value="-7.19">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Nama (opsional)</label>
+            <input type="text" id="roi_name" placeholder="ROI Sampang A">
+          </div>
+          <div style="display:flex; align-items:flex-end; gap:8px;">
+            <button class="btn" id="btn-create-bbox">POST /roi/bbox</button>
+            <button class="btn secondary" id="btn-download-roi" disabled>Download ROI</button>
+          </div>
+        </div>
+        <div>
+          <label>ROI ID aktif</label>
+          <input type="text" id="roi_id" placeholder="(otomatis diisi)" readonly>
+          <div class="muted">Gunakan ROI ID ini untuk langkah 2—4.</div>
+        </div>
+        <details>
+          <summary style="cursor:pointer">Atau buat dari GeoJSON (Polygon/MultiPolygon)</summary>
+          <div class="gap"></div>
+          <textarea id="geojson_text" placeholder='{"type":"Polygon","coordinates":[[[113.35,-7.22],[113.38,-7.22],[113.38,-7.19],[113.35,-7.19],[113.35,-7.22]]]}'></textarea>
+          <div style="display:flex; gap:8px;">
+            <button class="btn" id="btn-create-geojson">POST /roi/geojson</button>
+          </div>
+        </details>
+        <pre id="out-roi">{}</pre>
+      </div>
+
+      <h2>2) Analisis ROI</h2>
+      <div class="stack">
+        <div class="row">
+          <div>
+            <label>Tahun</label>
+            <input type="number" id="year" value="2025" min="2015" max="2035">
+          </div>
+          <div>
+            <label>Cloud %</label>
+            <input type="number" id="cloud_pct" value="15" min="0" max="100">
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="btn-analyze">POST /roi/{roi_id}/analyze</button>
+        </div>
+        <pre id="out-analyze">{}</pre>
+      </div>
+
+      <h2>3) Ambil Tile NDWI/NDBI</h2>
+      <div class="stack">
+        <div class="row">
+          <div>
+            <label>Index</label>
+            <input type="text" id="index_name" value="ndwi" placeholder="ndwi atau ndbi">
+          </div>
+          <div style="display:flex; align-items:flex-end; gap:8px;">
+            <button class="btn" id="btn-index">GET /roi/{roi_id}/index</button>
+          </div>
+        </div>
+        <pre id="out-index">{}</pre>
+      </div>
+
+      <h2>4) Intersection ROI × RDTR</h2>
+      <div class="stack">
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="btn-intersection">POST /roi/{roi_id}/intersection</button>
+          <a id="download-intersection" class="btn secondary" href="#" download style="display:none; text-decoration:none;">Download Intersection</a>
+        </div>
+        <pre id="out-intersection">{}</pre>
+      </div>
+
+      <p class="muted">Catatan: Jika mengalami CORS saat membuka file ini langsung (file://), jalankan server statis mis. <code>python -m http.server 5500</code> dan buka <code>http://127.0.0.1:5500</code>. Pastikan backend mengaktifkan CORS.</p>
+    </section>
+
+    <section>
+      <div id="map"></div>
+    </section>
+  </main>
+
+  <!-- Leaflet JS -->
+  <script
+  src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+  integrity="sha512-VuZ8Yd4rZFY0v1w7Qw+Jm0vI0H6t0rE5xwK0Bv1x3tq8m1h3d+7x8H2oO0g1Vv9z1B2XrGgLZpJ5iR2q6n2Q=="
+  crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    const BASE_URL = localStorage.getItem('geo_base_url') || 'http://127.0.0.1:8000';
+    document.getElementById('base-url-label').textContent = BASE_URL;
+
+    // Map init
+    const map = L.map('map').setView([-7.205, 113.365], 12);
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+    map.setView([-7.205, 113.365], 12);
+
+    let roiLayer = null;
+    let indexLayer = null;
+    let intersectionLayer = null;
+
+    const outRoi = document.getElementById('out-roi');
+    const outAnalyze = document.getElementById('out-analyze');
+    const outIndex = document.getElementById('out-index');
+    const outIntersection = document.getElementById('out-intersection');
+
+    const roiIdInput = document.getElementById('roi_id');
+    const btnDownloadRoi = document.getElementById('btn-download-roi');
+
+    async function fetchJSON(path, options = {}) {
+      const res = await fetch(BASE_URL + path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) return res.json();
+      // For file downloads, return blob
+      return res.blob();
+    }
+
+    
+
+    async function healthCheck(){
+      const label = document.getElementById('health');
+      try {
+        const r = await fetchJSON('/health');
+        label.textContent = 'OK';
+        label.style.color = '#22c55e';
+      } catch (e) {
+        label.textContent = 'DOWN';
+        label.style.color = '#ef4444';
+        console.warn(e);
+      }
+    }
+    healthCheck();
+
+    function showJSON(el, obj){
+      el.textContent = JSON.stringify(obj, null, 2);
+    }
+
+    function fitGeoJSONToMap(geojson){
+      if(!geojson) return;
+      const layer = L.geoJSON(geojson);
+      try { map.fitBounds(layer.getBounds(), { padding:[12,12] }); } catch {}
+    }
+
+    function setRoiLayer(geojson){
+      if (roiLayer) { roiLayer.remove(); roiLayer = null; }
+      roiLayer = L.geoJSON(geojson, { style:{ color:'#22d3ee', weight:2 } }).addTo(map);
+      fitGeoJSONToMap(geojson);
+    }
+
+    function setIndexTile(tileUrl){
+      if(indexLayer){ indexLayer.remove(); indexLayer = null; }
+      indexLayer = L.tileLayer(tileUrl, { opacity: 0.75, maxZoom: 19, attribution: 'GEE' }).addTo(map);
+    }
+
+    function setIntersectionLayer(geojson){
+      if (intersectionLayer) { intersectionLayer.remove(); intersectionLayer = null; }
+      intersectionLayer = L.geoJSON(geojson, { style:{ color:'#ef4444', weight:2, fillOpacity:0.35 } }).addTo(map);
+      fitGeoJSONToMap(geojson);
+    }
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    setTimeout(() => map.invalidateSize(), 200);
+    window.addEventListener('resize', () => map.invalidateSize());
+
+    // 1) Create ROI from BBOX
+    document.getElementById('btn-create-bbox').addEventListener('click', async () => {
+      const min_lon = parseFloat(document.getElementById('min_lon').value);
+      const min_lat = parseFloat(document.getElementById('min_lat').value);
+      const max_lon = parseFloat(document.getElementById('max_lon').value);
+      const max_lat = parseFloat(document.getElementById('max_lat').value);
+      const name = document.getElementById('roi_name').value || null;
+      try {
+        const payload = { name, bbox: { min_lon, min_lat, max_lon, max_lat } };
+        const data = await fetchJSON('/roi/bbox', { method:'POST', body: JSON.stringify(payload) });
+        showJSON(outRoi, data);
+        roiIdInput.value = data.roi_id;
+        btnDownloadRoi.disabled = false;
+        // fetch ROI geojson to draw
+        const roiGeo = await fetchJSON(`/roi/${data.roi_id}`);
+        setRoiLayer(roiGeo);
+      } catch (e) {
+        showJSON(outRoi, { error: String(e) });
+      }
+    });
+
+    // Create ROI from GeoJSON
+    document.getElementById('btn-create-geojson').addEventListener('click', async () => {
+      const name = document.getElementById('roi_name').value || null;
+      let geojson;
+      try { geojson = JSON.parse(document.getElementById('geojson_text').value); }
+      catch { return showJSON(outRoi, { error: 'GeoJSON tidak valid' }); }
+      try {
+        const data = await fetchJSON('/roi/geojson', { method:'POST', body: JSON.stringify({ name, geojson }) });
+        showJSON(outRoi, data);
+        roiIdInput.value = data.roi_id;
+        btnDownloadRoi.disabled = false;
+        const roiGeo = await fetchJSON(`/roi/${data.roi_id}`);
+        setRoiLayer(roiGeo);
+      } catch (e) {
+        showJSON(outRoi, { error: String(e) });
+      }
+    });
+
+    // Download ROI
+    btnDownloadRoi.addEventListener('click', async () => {
+      const id = roiIdInput.value.trim(); if(!id) return;
+      const url = `${BASE_URL}/roi/${id}/download`;
+      window.open(url, '_blank');
+    });
+
+    // 2) Analyze
+    document.getElementById('btn-analyze').addEventListener('click', async () => {
+      const id = roiIdInput.value.trim(); if(!id) return showJSON(outAnalyze, { error:'ROI ID kosong' });
+      const year = parseInt(document.getElementById('year').value, 10);
+      const cloud_pct = parseInt(document.getElementById('cloud_pct').value, 10);
+      try {
+        const body = { year, index:'ndwi', cloud_pct };
+        const data = await fetchJSON(`/roi/${id}/analyze`, { method:'POST', body: JSON.stringify(body) });
+        showJSON(outAnalyze, data);
+      } catch (e) {
+        showJSON(outAnalyze, { error: String(e) });
+      }
+    });
+
+    // 3) Index tile
+    document.getElementById('btn-index').addEventListener('click', async () => {
+      const id = roiIdInput.value.trim(); if(!id) return showJSON(outIndex, { error:'ROI ID kosong' });
+      const year = parseInt(document.getElementById('year').value, 10);
+      const cloud_pct = parseInt(document.getElementById('cloud_pct').value, 10);
+      const indexName = (document.getElementById('index_name').value || 'ndwi').toLowerCase();
+      try {
+        const q = new URLSearchParams({ year:String(year), index:indexName, cloud_pct:String(cloud_pct) }).toString();
+        const data = await fetchJSON(`/roi/${id}/index?${q}`);
+        showJSON(outIndex, data);
+        // add tile on map
+        setIndexTile(data.tile_url);
+        // ensure ROI is visible
+        const roiGeo = await fetchJSON(`/roi/${id}`);
+        setRoiLayer(roiGeo);
+      } catch (e) {
+        showJSON(outIndex, { error: String(e) });
+      }
+    });
+
+    // 4) Intersection
+    document.getElementById('btn-intersection').addEventListener('click', async () => {
+      const id = roiIdInput.value.trim(); if(!id) return showJSON(outIntersection, { error:'ROI ID kosong' });
+      try {
+        const data = await fetchJSON(`/roi/${id}/intersection`, { method:'POST' });
+        showJSON(outIntersection, data);
+        // show download link and also paint the result
+        const dl = document.getElementById('download-intersection');
+        dl.href = `${BASE_URL}/intersection/${id}/download`;
+        dl.style.display = 'inline-flex';
+
+        // fetch the geojson to draw
+        const res = await fetch(dl.href);
+        if (res.ok) {
+          const geojson = await res.json();
+          setIntersectionLayer(geojson);
+        }
+      } catch (e) {
+        showJSON(outIntersection, { error: String(e) });
+      }
+    });
+
+    
+  </script>
+</body>
+</html>
